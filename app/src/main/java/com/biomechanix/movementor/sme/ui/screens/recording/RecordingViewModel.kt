@@ -43,7 +43,10 @@ data class RecordingUiState(
     val session: RecordingSessionEntity? = null,
     val error: String? = null,
     val showPoseOverlay: Boolean = true,
-    val qualityIndicator: QualityIndicator = QualityIndicator.UNKNOWN
+    val qualityIndicator: QualityIndicator = QualityIndicator.UNKNOWN,
+    val voiceControlEnabled: Boolean = false,
+    val voiceListening: Boolean = false,
+    val lastVoiceCommand: String = ""
 )
 
 /**
@@ -400,6 +403,58 @@ class RecordingViewModel @Inject constructor(
      */
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    /**
+     * Toggle voice control on/off.
+     */
+    fun toggleVoiceControl() {
+        _uiState.update { it.copy(voiceControlEnabled = !it.voiceControlEnabled) }
+    }
+
+    /**
+     * Update voice listening state.
+     */
+    fun setVoiceListening(isListening: Boolean) {
+        _uiState.update { it.copy(voiceListening = isListening) }
+    }
+
+    /**
+     * Handle voice command.
+     */
+    fun handleVoiceCommand(command: VoiceCommand, exerciseType: String, exerciseName: String) {
+        val commandName = command.name.lowercase().replaceFirstChar { it.uppercase() }
+        _uiState.update { it.copy(lastVoiceCommand = commandName) }
+
+        when (command) {
+            VoiceCommand.START -> {
+                if (!_uiState.value.isRecording) {
+                    startRecording(exerciseType, exerciseName)
+                }
+            }
+            VoiceCommand.STOP -> {
+                if (_uiState.value.isRecording) {
+                    stopRecording()
+                }
+            }
+            VoiceCommand.PAUSE -> {
+                if (_uiState.value.isRecording && !_uiState.value.isPaused) {
+                    pauseRecording()
+                }
+            }
+            VoiceCommand.RESUME -> {
+                if (_uiState.value.isRecording && _uiState.value.isPaused) {
+                    resumeRecording()
+                }
+            }
+            VoiceCommand.NONE -> { /* Do nothing */ }
+        }
+
+        // Clear command display after a delay
+        viewModelScope.launch {
+            delay(2000)
+            _uiState.update { it.copy(lastVoiceCommand = "") }
+        }
     }
 
     /**
