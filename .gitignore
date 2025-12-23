@@ -1,0 +1,175 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+.pnp/
+.pnp.js
+
+# =========================
+# Build outputs
+# =========================
+# Java/Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Next.js
+.next/
+out/
+build/
+dist/
+gradle/
+
+# =========================
+# Environment files
+# =========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# =========================
+# IDE and editors
+# =========================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# =========================
+# OS generated files
+# =========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Binary files
+# =========================
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.o
+*.a
+*.lib
+*.out
+
+# =========================
+# Package files
+# =========================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# =========================
+# Test and coverage
+# =========================
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+junit.xml
+
+# =========================
+# Misc
+# =========================
+.cache/
+.temp/
+.tmp/
+*.bak
+*.backup
+*.orig
+nul
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
+next-env.d.ts
+
+# =========================
+# Vercel
+# =========================
+.vercel
+
+# =========================
+# Docker
+# =========================
+*.pid
+
+# =========================
+# Maven wrapper (optional)
+# =========================
+!.mvn/wrapper/maven-wrapper.jar
+
+# =========================
+# Gradle wrapper JAR (keep in repo)
+# =========================
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# =========================
+# Android
+# =========================
+*.apk
+*.aab
+*.ap_
+*.dex
+.gradle/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+android/app/build/
+android/.gradle/
+
+# =========================
+# iOS
+# =========================
+*.xcworkspace
+!*.xcworkspace/contents.xcworkspacedata
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+DerivedData/
+Pods/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3

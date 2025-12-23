@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(.\\\\gradlew.bat assembleDevDebug:*)",
+      "Bash(cmd /c \"gradlew.bat assembleDevDebug --no-daemon\")",
+      "Bash(./gradlew assembleDevDebug:*)",
+      "Bash(./gradlew clean:*)",
+      "Bash(grep:*)",
+      "Bash(./gradlew:*)",
+      "Bash(find:*)",
+      "Bash(xargs -I{} sh -c 'echo \"\"=== {} ===\"\" && grep -o \"\"tests=\\\\\"\"[0-9]*\\\\\"\"\"\" {} | head -1')",
+      "Bash(xargs -I{} sh -c 'cat {} | grep -o \"\"tests=\\\\\"\"[0-9]*\\\\\"\"\"\" | head -1')",
+      "Bash(cat:*)",
+      "Bash(curl:*)",
+      "Bash(adb devices:*)",
+      "Bash(adb shell am start:*)",
+      "Bash(adb logcat:*)",
+      "Bash(adb exec-out:*)"
+    ]
+  }
+}
