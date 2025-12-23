@@ -46,7 +46,9 @@ data class RecordingUiState(
     val qualityIndicator: QualityIndicator = QualityIndicator.UNKNOWN,
     val voiceControlEnabled: Boolean = false,
     val voiceListening: Boolean = false,
-    val lastVoiceCommand: String = ""
+    val lastVoiceCommand: String = "",
+    val isVideoCaptureAvailable: Boolean = false,
+    val isPoseDetectionAvailable: Boolean = false
 )
 
 /**
@@ -107,6 +109,25 @@ class RecordingViewModel @Inject constructor(
 
     init {
         observePoseDetection()
+        observeCameraState()
+    }
+
+    /**
+     * Observe camera manager state for errors and availability.
+     */
+    private fun observeCameraState() {
+        viewModelScope.launch {
+            cameraManager.isVideoCaptureAvailable.collect { available ->
+                _uiState.update { it.copy(isVideoCaptureAvailable = available) }
+            }
+        }
+        viewModelScope.launch {
+            cameraManager.recordingError.collect { error ->
+                if (error != null) {
+                    _uiState.update { it.copy(error = error) }
+                }
+            }
+        }
     }
 
     private var poseDetectionAvailable = false
@@ -145,7 +166,8 @@ class RecordingViewModel @Inject constructor(
                     it.copy(
                         isInitializing = false,
                         // Show pose overlay only if pose detection is available
-                        showPoseOverlay = poseDetectionAvailable
+                        showPoseOverlay = poseDetectionAvailable,
+                        isPoseDetectionAvailable = poseDetectionAvailable
                     )
                 }
             } catch (e: Exception) {
@@ -200,6 +222,14 @@ class RecordingViewModel @Inject constructor(
     fun startRecording(exerciseType: String, exerciseName: String) {
         if (_uiState.value.isRecording) return
 
+        // Check if video capture is available
+        if (!_uiState.value.isVideoCaptureAvailable) {
+            viewModelScope.launch {
+                _events.send(RecordingEvent.Error("Video capture not available. Please restart the app."))
+            }
+            return
+        }
+
         viewModelScope.launch {
             try {
                 // Create session if not exists
@@ -230,8 +260,13 @@ class RecordingViewModel @Inject constructor(
                 recordingRepository.updateSessionVideoPath(currentSessionId!!, videoFile.absolutePath)
 
                 // Start video recording
-                cameraManager.startRecording(videoFile) { event ->
+                val recordingStarted = cameraManager.startRecording(videoFile) { event ->
                     // Handle recording events if needed
+                }
+
+                if (!recordingStarted) {
+                    _events.send(RecordingEvent.Error("Failed to start video recording"))
+                    return@launch
                 }
 
                 // Start frame collection
@@ -242,7 +277,8 @@ class RecordingViewModel @Inject constructor(
                         isRecording = true,
                         isPaused = false,
                         recordingDurationMs = 0,
-                        frameCount = 0
+                        frameCount = 0,
+                        error = null
                     )
                 }
                 _events.send(RecordingEvent.RecordingStarted)
