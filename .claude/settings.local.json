@@ -16,7 +16,10 @@
       "Bash(adb devices:*)",
       "Bash(adb shell am start:*)",
       "Bash(adb logcat:*)",
-      "Bash(adb exec-out:*)"
+      "Bash(adb exec-out:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:medium.com)"
     ]
   }
 }

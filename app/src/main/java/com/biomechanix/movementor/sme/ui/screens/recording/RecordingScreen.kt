@@ -1,11 +1,15 @@
 package com.biomechanix.movementor.sme.ui.screens.recording
 
+import android.app.Activity
 import android.Manifest
 import android.view.ViewGroup
+import android.view.WindowManager
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlipCameraAndroid
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -184,6 +190,59 @@ private fun RecordingScreenContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
+    // Keep screen on and maintain brightness while on recording screen
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val window = activity?.window
+        val originalBrightness = window?.attributes?.screenBrightness ?: -1f
+
+        // Keep screen on
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Set brightness to maximum (1.0f) for consistent recording conditions
+        window?.attributes = window?.attributes?.apply {
+            screenBrightness = 1.0f
+        }
+
+        onDispose {
+            // Restore original settings when leaving the screen
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window?.attributes = window?.attributes?.apply {
+                screenBrightness = originalBrightness
+            }
+        }
+    }
+
+    // Voice command listener
+    val voiceCommandListener = remember {
+        VoiceCommandListener(context) { command ->
+            viewModel.handleVoiceCommand(command, exerciseType, exerciseName)
+        }
+    }
+
+    // Start/stop voice listening based on state
+    LaunchedEffect(uiState.voiceControlEnabled) {
+        if (uiState.voiceControlEnabled) {
+            voiceCommandListener.startListening()
+        } else {
+            voiceCommandListener.stopListening()
+        }
+    }
+
+    // Update voice listening state from listener
+    LaunchedEffect(Unit) {
+        voiceCommandListener.state.collect { voiceState ->
+            viewModel.setVoiceListening(voiceState.isListening)
+        }
+    }
+
+    // Cleanup voice listener on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceCommandListener.release()
+        }
+    }
+
     // Create PreviewView with COMPATIBLE mode for proper Compose integration
     val previewView = remember {
         PreviewView(context).apply {
@@ -293,6 +352,26 @@ private fun RecordingScreenContent(
                 .align(Alignment.TopEnd)
                 .padding(top = 72.dp, end = 16.dp)
         )
+
+        // Voice control indicator
+        VoiceControlIndicator(
+            isEnabled = uiState.voiceControlEnabled,
+            isListening = uiState.voiceListening,
+            onToggle = { viewModel.toggleVoiceControl() },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 72.dp, start = 16.dp)
+        )
+
+        // Voice command feedback
+        AnimatedVisibility(
+            visible = uiState.lastVoiceCommand.isNotEmpty(),
+            enter = scaleIn() + fadeIn(),
+            exit = scaleOut() + fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            VoiceCommandFeedback(command = uiState.lastVoiceCommand)
+        }
 
         // Recording info (duration, frame count)
         if (uiState.isRecording) {
@@ -540,4 +619,83 @@ private fun formatDuration(durationMs: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+}
+
+/**
+ * Voice control toggle indicator.
+ */
+@Composable
+private fun VoiceControlIndicator(
+    isEnabled: Boolean,
+    isListening: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = when {
+        isListening -> Color(0xFF4CAF50).copy(alpha = 0.9f) // Green when actively listening
+        isEnabled -> Color(0xFFFFC107).copy(alpha = 0.9f)   // Yellow when enabled but not listening
+        else -> Color.Black.copy(alpha = 0.5f)              // Gray when disabled
+    }
+
+    Surface(
+        onClick = onToggle,
+        shape = RoundedCornerShape(12.dp),
+        color = backgroundColor,
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Icon(
+                imageVector = if (isEnabled) Icons.Default.Mic else Icons.Default.MicOff,
+                contentDescription = if (isEnabled) "Voice control on" else "Voice control off",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = when {
+                    isListening -> "Listening..."
+                    isEnabled -> "Voice On"
+                    else -> "Voice Off"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White
+            )
+        }
+    }
+}
+
+/**
+ * Voice command feedback overlay shown when a command is detected.
+ */
+@Composable
+private fun VoiceCommandFeedback(
+    command: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF00FFFF).copy(alpha = 0.9f), // Neon cyan to match pose overlay
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 20.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = null,
+                tint = Color.Black,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = command,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.Black
+            )
+        }
+    }
 }
