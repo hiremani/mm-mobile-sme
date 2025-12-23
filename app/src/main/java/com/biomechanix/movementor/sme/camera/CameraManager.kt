@@ -46,6 +46,12 @@ class CameraManager @Inject constructor(
     private val _recordingDurationMs = MutableStateFlow(0L)
     val recordingDurationMs: StateFlow<Long> = _recordingDurationMs.asStateFlow()
 
+    private val _isVideoCaptureAvailable = MutableStateFlow(false)
+    val isVideoCaptureAvailable: StateFlow<Boolean> = _isVideoCaptureAvailable.asStateFlow()
+
+    private val _recordingError = MutableStateFlow<String?>(null)
+    val recordingError: StateFlow<String?> = _recordingError.asStateFlow()
+
     private var recordingStartTime: Long = 0L
 
     private val mainExecutor: Executor
@@ -130,8 +136,13 @@ class CameraManager @Inject constructor(
 
         videoCapture = VideoCapture.withOutput(recorder)
 
-        // Bind use cases
+        // Bind use cases - track which ones succeed
+        // Priority: Video recording is most important, then pose detection
+        _isVideoCaptureAvailable.value = false
+        _recordingError.value = null
+
         try {
+            // Try all three: Preview + ImageAnalysis + VideoCapture
             provider.bindToLifecycle(
                 lifecycleOwner,
                 cameraSelector,
@@ -139,22 +150,48 @@ class CameraManager @Inject constructor(
                 imageAnalysis,
                 videoCapture
             )
+            _isVideoCaptureAvailable.value = true
         } catch (e: Exception) {
-            // If binding all three fails, try without video capture
+            // Three-way binding often fails - try Preview + VideoCapture (skip pose detection)
             try {
+                imageAnalysis = null // Clear - pose detection won't work
                 provider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
-                    imageAnalysis
+                    videoCapture
                 )
+                _isVideoCaptureAvailable.value = true
+                // Note: pose detection unavailable but video recording works
             } catch (e2: Exception) {
-                // Last resort - just preview
-                provider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview
-                )
+                // Video capture not supported - try Preview + ImageAnalysis
+                videoCapture = null
+                try {
+                    imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { analysis ->
+                            imageAnalyzer?.let { analyzer ->
+                                analysis.setAnalyzer(mainExecutor, analyzer)
+                            }
+                        }
+                    provider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                    _recordingError.value = "Video recording unavailable on this device"
+                } catch (e3: Exception) {
+                    // Last resort - just preview
+                    imageAnalysis = null
+                    provider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview
+                    )
+                    _recordingError.value = "Camera limited: preview only"
+                }
             }
         }
     }
@@ -164,18 +201,26 @@ class CameraManager @Inject constructor(
      *
      * @param outputFile The file to save the recording to
      * @param onEvent Callback for recording events
+     * @return true if recording started, false if video capture unavailable
      */
+    @androidx.annotation.OptIn(androidx.camera.video.ExperimentalPersistentRecording::class)
     fun startRecording(
         outputFile: File,
         onEvent: (VideoRecordEvent) -> Unit = {}
-    ) {
-        val capture = videoCapture ?: return
-        if (_isRecording.value) return
+    ): Boolean {
+        val capture = videoCapture
+        if (capture == null) {
+            _recordingError.value = "Video capture not available"
+            return false
+        }
+        if (_isRecording.value) return false
 
+        _recordingError.value = null
         val outputOptions = FileOutputOptions.Builder(outputFile).build()
 
         currentRecording = capture.output
             .prepareRecording(context, outputOptions)
+            .withAudioEnabled() // Enable audio recording
             .start(mainExecutor) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
@@ -188,10 +233,34 @@ class CameraManager @Inject constructor(
                     is VideoRecordEvent.Finalize -> {
                         _isRecording.value = false
                         _recordingDurationMs.value = 0L
+                        // Check for recording errors
+                        if (event.hasError()) {
+                            val errorMsg = when (event.error) {
+                                VideoRecordEvent.Finalize.ERROR_NONE -> null
+                                VideoRecordEvent.Finalize.ERROR_UNKNOWN -> "Unknown error"
+                                VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED -> "File size limit reached"
+                                VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE -> "Insufficient storage"
+                                VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> "Camera inactive"
+                                VideoRecordEvent.Finalize.ERROR_INVALID_OUTPUT_OPTIONS -> "Invalid output options"
+                                VideoRecordEvent.Finalize.ERROR_ENCODING_FAILED -> "Encoding failed"
+                                VideoRecordEvent.Finalize.ERROR_RECORDER_ERROR -> "Recorder error"
+                                VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA -> "No valid data recorded"
+                                else -> "Error code: ${event.error}"
+                            }
+                            errorMsg?.let { _recordingError.value = "Recording failed: $it" }
+                        }
                     }
                 }
                 onEvent(event)
             }
+        return true
+    }
+
+    /**
+     * Clear any recording error.
+     */
+    fun clearError() {
+        _recordingError.value = null
     }
 
     /**

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
@@ -362,6 +363,30 @@ private fun RecordingScreenContent(
                 .align(Alignment.TopStart)
                 .padding(top = 72.dp, start = 16.dp)
         )
+
+        // Warnings column (below quality indicator)
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 120.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Video capture warning
+            if (!uiState.isVideoCaptureAvailable && !uiState.isInitializing) {
+                WarningBadge(
+                    message = "Video capture unavailable",
+                    isError = true
+                )
+            }
+
+            // Pose detection warning
+            if (!uiState.isPoseDetectionAvailable && !uiState.isInitializing) {
+                WarningBadge(
+                    message = "Pose detection unavailable",
+                    isError = false
+                )
+            }
+        }
 
         // Voice command feedback
         AnimatedVisibility(
@@ -695,6 +720,46 @@ private fun VoiceCommandFeedback(
                 text = command,
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.Black
+            )
+        }
+    }
+}
+
+/**
+ * Warning badge for displaying capability issues.
+ */
+@Composable
+private fun WarningBadge(
+    message: String,
+    isError: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (isError) {
+        Color(0xFFF44336).copy(alpha = 0.9f) // Red for errors
+    } else {
+        Color(0xFFFFC107).copy(alpha = 0.9f) // Yellow for warnings
+    }
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = backgroundColor,
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = if (isError) Color.White else Color.Black,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isError) Color.White else Color.Black
             )
         }
     }
