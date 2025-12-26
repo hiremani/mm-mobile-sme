@@ -73,6 +73,12 @@ The MoveMentor SME Mobile App empowers fitness professionals, physical therapist
 - **US-020**: Trigger package generation (online or queued)
 - **US-021**: View generation status
 
+### Camera Setup Sync
+- **US-029**: Camera setup configuration captured during recording (distance, height, angle)
+- **US-030**: AR setup data captured (floor markers, height markers, exercise zone)
+- **US-031**: Setup instructions generated for end users
+- **US-032**: Camera setup included in package generation request
+
 ### Offline Operation
 - **US-022**: Full offline recording and annotation
 - **US-023**: Offline data storage with sync tracking
@@ -116,6 +122,19 @@ The MoveMentor SME Mobile App empowers fitness professionals, physical therapist
 5. Merge phases shorter than 10 frames
 6. Assign confidence based on velocity contrast
 ```
+
+### Camera Setup Configuration
+| Field | Type | Description |
+|-------|------|-------------|
+| optimalDistanceMeters | Float | Optimal distance from camera to subject |
+| cameraHeightRatio | Float | 0.0 = floor, 1.0 = head height |
+| cameraView | Enum | FRONT, SIDE_LEFT, SIDE_RIGHT, BACK, DIAGONAL_* |
+| movementPlane | Enum | SAGITTAL, FRONTAL, TRANSVERSE, MULTI_PLANE |
+| subjectPositioning | Object | Center X/Y, bounding box |
+| arSetupData | Object | Exercise zone, floor markers, height markers |
+| setupInstructions | Object | Text instructions for end users |
+| referencePose | Object | Captured reference pose landmarks |
+| setupScore | Float | Quality score (0-100) |
 
 ## 1.5 Screen Flow
 
@@ -299,6 +318,24 @@ data class PhaseAnnotationEntity(
 | Update Phase | `/v1/expert-recordings/phases/{id}` | PUT |
 | Generate Package | `/v1/expert-recordings/sessions/{id}/generate` | POST |
 | Sync | `/v1/mobile/sync` | POST |
+
+### Camera Setup Sync (Package Generation)
+The `GeneratePackageRequest` includes an optional `cameraSetup` field:
+```kotlin
+data class GeneratePackageRequest(
+    val name: String,
+    val description: String? = null,
+    val version: String = "1.0.0",
+    // ... other fields
+    val cameraSetup: CameraSetupDto? = null  // NEW: Camera setup from SME
+)
+```
+
+The `CameraSetupDto` is converted from `CameraSetupConfigEntity` stored locally during recording setup and includes:
+- Spatial parameters (distance, height, angle)
+- AR setup data (floor markers, height markers, exercise zones)
+- Setup instructions (text guidance for end users)
+- Reference pose landmarks
 
 ### Interceptors
 - **AuthInterceptor**: Adds Bearer token, handles 401 with token refresh

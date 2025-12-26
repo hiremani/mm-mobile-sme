@@ -19,7 +19,8 @@
       "Bash(adb exec-out:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:medium.com)"
+      "WebFetch(domain:medium.com)",
+      "Bash(./mvnw compile:*)"
     ]
   }
 }
