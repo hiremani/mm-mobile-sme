@@ -371,11 +371,24 @@ class RecordingViewModel @Inject constructor(
      * Start collecting pose frames.
      */
     private fun startFrameCollection() {
+        android.util.Log.d("RecordingVM", "Starting frame collection for session $currentSessionId")
         frameCollectionJob = viewModelScope.launch {
+            var nullPoseCount = 0
+            var invalidPoseCount = 0
             while (_uiState.value.isRecording) {
                 if (!_uiState.value.isPaused) {
                     val currentPose = poseDetector.latestPose.value
-                    if (currentPose != null && currentPose.isValid) {
+                    if (currentPose == null) {
+                        nullPoseCount++
+                        if (nullPoseCount % 30 == 1) { // Log once per second
+                            android.util.Log.w("RecordingVM", "Pose is NULL ($nullPoseCount times) - is pose detection running?")
+                        }
+                    } else if (!currentPose.isValid) {
+                        invalidPoseCount++
+                        if (invalidPoseCount % 30 == 1) {
+                            android.util.Log.w("RecordingVM", "Pose is INVALID ($invalidPoseCount times) - confidence too low?")
+                        }
+                    } else {
                         collectFrame(currentPose)
                     }
 
@@ -420,8 +433,14 @@ class RecordingViewModel @Inject constructor(
 
         _uiState.update { it.copy(frameCount = frameIndex) }
 
+        // Log every 30 frames (once per second at 30fps)
+        if (frameIndex % 30 == 0) {
+            android.util.Log.d("RecordingVM", "Collected $frameIndex frames for session $sessionId")
+        }
+
         // Save in batches
         if (pendingFrames.size >= BATCH_SAVE_SIZE) {
+            android.util.Log.d("RecordingVM", "Saving batch of ${pendingFrames.size} frames to DB for session $sessionId")
             recordingRepository.savePoseFramesBatch(pendingFrames.toList())
             pendingFrames.clear()
         }
