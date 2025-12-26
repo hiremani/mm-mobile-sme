@@ -4,6 +4,8 @@ import android.content.Context
 import com.biomechanix.movementor.sme.camera.CameraManager
 import com.biomechanix.movementor.sme.ml.PhaseDetector
 import com.biomechanix.movementor.sme.ml.PoseDetector
+import com.biomechanix.movementor.sme.ml.VelocityPhaseDetector
+import com.biomechanix.movementor.sme.ml.VideoFrameProcessor
 import com.biomechanix.movementor.sme.ml.setup.AdaptiveDistanceEstimator
 import com.biomechanix.movementor.sme.ml.setup.KeypointAnalyzer
 import com.biomechanix.movementor.sme.ml.setup.VoiceGuidanceEngine
@@ -44,6 +46,23 @@ object MlModule {
         gson: Gson
     ): PhaseDetector {
         return PhaseDetector(gson)
+    }
+
+    @Provides
+    @Singleton
+    fun provideVelocityPhaseDetector(
+        gson: Gson
+    ): VelocityPhaseDetector {
+        return VelocityPhaseDetector(gson)
+    }
+
+    @Provides
+    @Singleton
+    fun provideVideoFrameProcessor(
+        @ApplicationContext context: Context,
+        gson: Gson
+    ): VideoFrameProcessor {
+        return VideoFrameProcessor(context, gson)
     }
 
     // ========================================

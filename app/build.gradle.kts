@@ -23,6 +23,11 @@ android {
             useSupportLibrary = true
         }
 
+        // Only include ABIs that MediaPipe supports (excludes x86_64)
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86")
+        }
+
         // Room schema export
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
