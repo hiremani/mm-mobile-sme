@@ -52,6 +52,10 @@ class CameraManager @Inject constructor(
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError.asStateFlow()
 
+    // Signals when recording has been fully finalized (video file is complete)
+    private val _recordingFinalized = MutableStateFlow(false)
+    val recordingFinalized: StateFlow<Boolean> = _recordingFinalized.asStateFlow()
+
     private var recordingStartTime: Long = 0L
 
     private val mainExecutor: Executor
@@ -215,22 +219,26 @@ class CameraManager @Inject constructor(
         }
         if (_isRecording.value) return false
 
+        android.util.Log.d("CameraManager", "startRecording: video only (no audio)")
         _recordingError.value = null
+        _recordingFinalized.value = false  // Reset finalized state
         val outputOptions = FileOutputOptions.Builder(outputFile).build()
 
+        // Video only - no audio recording (keeps microphone free for voice commands)
         currentRecording = capture.output
             .prepareRecording(context, outputOptions)
-            .withAudioEnabled() // Enable audio recording
             .start(mainExecutor) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
                         _isRecording.value = true
+                        _recordingFinalized.value = false
                         recordingStartTime = System.currentTimeMillis()
                     }
                     is VideoRecordEvent.Status -> {
                         _recordingDurationMs.value = System.currentTimeMillis() - recordingStartTime
                     }
                     is VideoRecordEvent.Finalize -> {
+                        android.util.Log.d("CameraManager", "Recording finalized, hasError=${event.hasError()}")
                         _isRecording.value = false
                         _recordingDurationMs.value = 0L
                         // Check for recording errors
@@ -249,6 +257,9 @@ class CameraManager @Inject constructor(
                             }
                             errorMsg?.let { _recordingError.value = "Recording failed: $it" }
                         }
+                        // Signal that video file is now complete and ready
+                        _recordingFinalized.value = true
+                        android.util.Log.d("CameraManager", "Recording finalized signal sent")
                     }
                 }
                 onEvent(event)

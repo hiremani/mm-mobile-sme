@@ -43,6 +43,10 @@ class VideoPlayerState(
         private set
     var totalFrames by mutableStateOf(0)
         private set
+    var isReady by mutableStateOf(false)
+        private set
+    var isWaitingForVideo by mutableStateOf(true)
+    var error by mutableStateOf<String?>(null)
 
     private var frameRate: Int = 30
 
@@ -57,29 +61,52 @@ class VideoPlayerState(
         isPlaying = player.isPlaying
         currentPositionMs = player.currentPosition
         durationMs = player.duration.coerceAtLeast(0)
+        isReady = player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING
         if (durationMs > 0) {
             totalFrames = ((durationMs / 1000.0) * frameRate).toInt()
             currentFrame = ((currentPositionMs / 1000.0) * frameRate).toInt()
         }
+        android.util.Log.d("VideoPlayer", "updateState: isPlaying=$isPlaying, isReady=$isReady, duration=$durationMs, position=$currentPositionMs, playbackState=${player.playbackState}")
+    }
+
+    fun updateError(message: String?) {
+        error = message
     }
 
     fun play() {
+        android.util.Log.d("VideoPlayer", "play() called, isReady=$isReady, playbackState=${player.playbackState}")
+        if (player.playbackState == Player.STATE_ENDED) {
+            // If video ended, seek to start before playing
+            player.seekTo(0)
+        }
         player.play()
-        updateState()
+        // Don't call updateState() here - let the listener handle it
     }
 
     fun pause() {
+        android.util.Log.d("VideoPlayer", "pause() called")
         player.pause()
-        updateState()
+        // Don't call updateState() here - let the listener handle it
     }
 
     fun togglePlayPause() {
+        android.util.Log.d("VideoPlayer", "togglePlayPause() called, current isPlaying=$isPlaying")
         if (isPlaying) pause() else play()
     }
 
     fun seekTo(positionMs: Long) {
-        player.seekTo(positionMs.coerceIn(0, durationMs))
-        updateState()
+        val targetPos = if (durationMs > 0) {
+            positionMs.coerceIn(0, durationMs)
+        } else {
+            positionMs.coerceAtLeast(0)
+        }
+        android.util.Log.d("VideoPlayer", "seekTo($positionMs) -> $targetPos")
+        player.seekTo(targetPos)
+        // Update state after seek
+        currentPositionMs = targetPos
+        if (durationMs > 0) {
+            currentFrame = ((currentPositionMs / 1000.0) * frameRate).toInt()
+        }
     }
 
     fun seekToFrame(frame: Int) {
@@ -88,7 +115,12 @@ class VideoPlayerState(
     }
 
     fun stepForward(frames: Int = 1) {
-        seekToFrame((currentFrame + frames).coerceAtMost(totalFrames))
+        val targetFrame = if (totalFrames > 0) {
+            (currentFrame + frames).coerceAtMost(totalFrames)
+        } else {
+            currentFrame + frames
+        }
+        seekToFrame(targetFrame)
     }
 
     fun stepBackward(frames: Int = 1) {
@@ -100,7 +132,9 @@ class VideoPlayerState(
     }
 
     fun seekToEnd() {
-        seekTo(durationMs)
+        if (durationMs > 0) {
+            seekTo(durationMs)
+        }
     }
 }
 
@@ -129,16 +163,57 @@ fun rememberVideoPlayerState(
 
     // Load video when path changes
     LaunchedEffect(videoPath) {
-        if (videoPath != null) {
-            val uri = Uri.fromFile(File(videoPath))
+        android.util.Log.d("VideoPlayer", "LaunchedEffect: videoPath=$videoPath")
+        state.updateError(null)
+
+        if (videoPath == null) {
+            android.util.Log.d("VideoPlayer", "videoPath is null - waiting for video")
+            state.isWaitingForVideo = true
+            // Don't set error - null path means video is still being saved
+            return@LaunchedEffect
+        }
+
+        val videoFile = File(videoPath)
+        if (!videoFile.exists()) {
+            android.util.Log.w("VideoPlayer", "Video file does not exist yet: $videoPath")
+            state.isWaitingForVideo = true
+            // Don't set error immediately - file might still be writing
+            return@LaunchedEffect
+        }
+
+        val fileSize = videoFile.length()
+        if (fileSize == 0L) {
+            android.util.Log.w("VideoPlayer", "Video file exists but is empty: $videoPath")
+            state.isWaitingForVideo = true
+            // File is still being written
+            return@LaunchedEffect
+        }
+
+        if (!videoFile.canRead()) {
+            android.util.Log.e("VideoPlayer", "Cannot read video file: $videoPath")
+            state.isWaitingForVideo = false
+            state.updateError("Cannot read video file")
+            return@LaunchedEffect
+        }
+
+        android.util.Log.d("VideoPlayer", "Loading video file: $videoPath (size: $fileSize bytes)")
+        state.isWaitingForVideo = false
+
+        try {
+            val uri = Uri.fromFile(videoFile)
             val mediaItem = MediaItem.fromUri(uri)
             player.setMediaItem(mediaItem)
             player.prepare()
+            android.util.Log.d("VideoPlayer", "Player prepare() called")
+        } catch (e: Exception) {
+            android.util.Log.e("VideoPlayer", "Error loading video: ${e.message}", e)
+            state.updateError("Error loading video: ${e.message}")
         }
     }
 
     // Update state periodically while playing
     LaunchedEffect(state.isPlaying) {
+        android.util.Log.d("VideoPlayer", "Playback state changed: isPlaying=${state.isPlaying}")
         while (state.isPlaying) {
             state.updateState()
             delay(33) // ~30 FPS update rate
@@ -149,11 +224,25 @@ fun rememberVideoPlayerState(
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                android.util.Log.d("VideoPlayer", "onIsPlayingChanged: $isPlaying")
                 state.updateState()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val stateName = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN($playbackState)"
+                }
+                android.util.Log.d("VideoPlayer", "onPlaybackStateChanged: $stateName")
                 state.updateState()
+
+                // Clear any previous errors when video is ready
+                if (playbackState == Player.STATE_READY) {
+                    state.updateError(null)
+                }
             }
 
             override fun onPositionDiscontinuity(
@@ -161,12 +250,19 @@ fun rememberVideoPlayerState(
                 newPosition: Player.PositionInfo,
                 reason: Int
             ) {
+                android.util.Log.d("VideoPlayer", "onPositionDiscontinuity: ${oldPosition.positionMs} -> ${newPosition.positionMs}")
                 state.updateState()
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.e("VideoPlayer", "Player error: ${error.message}", error)
+                state.updateError("Playback error: ${error.message}")
             }
         }
         player.addListener(listener)
 
         onDispose {
+            android.util.Log.d("VideoPlayer", "Disposing player")
             player.removeListener(listener)
             player.release()
         }

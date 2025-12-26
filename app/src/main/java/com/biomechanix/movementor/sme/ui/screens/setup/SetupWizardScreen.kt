@@ -2,8 +2,12 @@ package com.biomechanix.movementor.sme.ui.screens.setup
 
 import android.Manifest
 import android.app.Activity
+import android.view.View
 import android.view.WindowManager
 import androidx.camera.view.PreviewView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -98,13 +102,30 @@ fun SetupWizardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Keep screen on during setup
+    // Full screen immersive mode and keep screen on
     DisposableEffect(Unit) {
-        val window = (context as? Activity)?.window
+        val activity = context as? Activity
+        val window = activity?.window
+
+        // Keep screen on
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // Enable full screen immersive mode
+        window?.let { win ->
+            WindowCompat.setDecorFitsSystemWindows(win, false)
+            val controller = WindowInsetsControllerCompat(win, win.decorView)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
 
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            // Restore system bars
+            window?.let { win ->
+                WindowCompat.setDecorFitsSystemWindows(win, true)
+                val controller = WindowInsetsControllerCompat(win, win.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -648,7 +669,7 @@ private fun KeypointVerificationStep(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color.Black.copy(alpha = 0.7f)
+                    containerColor = Color.Black.copy(alpha = 0.1f)
                 )
             ) {
                 Column(
@@ -717,7 +738,7 @@ private fun KeypointVerificationStep(
                     onClick = { viewModel.toggleCamera() },
                     modifier = Modifier
                         .size(48.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .background(Color.Black.copy(alpha = 0.1f), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Flip,
@@ -730,7 +751,7 @@ private fun KeypointVerificationStep(
                     onClick = { viewModel.togglePoseOverlay() },
                     modifier = Modifier
                         .size(48.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .background(Color.Black.copy(alpha = 0.1f), CircleShape)
                 ) {
                     Icon(
                         imageVector = if (uiState.isPoseOverlayVisible) {

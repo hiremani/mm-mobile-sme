@@ -62,12 +62,18 @@ class VoiceCommandListener(
      * Start listening for voice commands.
      */
     fun startListening() {
+        android.util.Log.d("VoiceCommand", "startListening() called, isAvailable=${_state.value.isAvailable}, isListening=$isListening")
+
         if (!_state.value.isAvailable) {
+            android.util.Log.w("VoiceCommand", "Speech recognition not available")
             _state.value = _state.value.copy(error = "Speech recognition not available")
             return
         }
 
-        if (isListening) return
+        if (isListening) {
+            android.util.Log.d("VoiceCommand", "Already listening, skipping")
+            return
+        }
 
         try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
@@ -82,7 +88,9 @@ class VoiceCommandListener(
                 error = null,
                 partialResult = ""
             )
+            android.util.Log.d("VoiceCommand", "Started listening successfully")
         } catch (e: Exception) {
+            android.util.Log.e("VoiceCommand", "Failed to start listening: ${e.message}", e)
             _state.value = _state.value.copy(
                 error = "Failed to start: ${e.message}",
                 isListening = false
@@ -127,16 +135,21 @@ class VoiceCommandListener(
     private fun createRecognitionListener(): RecognitionListener {
         return object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
+                android.util.Log.d("VoiceCommand", "onReadyForSpeech")
                 _state.value = _state.value.copy(isListening = true, error = null)
             }
 
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() {
+                android.util.Log.d("VoiceCommand", "onBeginningOfSpeech")
+            }
 
             override fun onRmsChanged(rmsdB: Float) {}
 
             override fun onBufferReceived(buffer: ByteArray?) {}
 
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() {
+                android.util.Log.d("VoiceCommand", "onEndOfSpeech")
+            }
 
             override fun onError(error: Int) {
                 val errorMessage = when (error) {
@@ -152,6 +165,8 @@ class VoiceCommandListener(
                     else -> "Unknown error"
                 }
 
+                android.util.Log.d("VoiceCommand", "onError: $error ($errorMessage)")
+
                 // For no match or timeout, just restart listening
                 if (error == SpeechRecognizer.ERROR_NO_MATCH ||
                     error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
@@ -165,6 +180,7 @@ class VoiceCommandListener(
 
             override fun onResults(results: Bundle?) {
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                android.util.Log.d("VoiceCommand", "onResults: $matches")
                 processResults(matches)
                 // Restart listening for continuous mode
                 restartListening()
@@ -173,11 +189,13 @@ class VoiceCommandListener(
             override fun onPartialResults(partialResults: Bundle?) {
                 val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val partial = matches?.firstOrNull() ?: ""
+                android.util.Log.d("VoiceCommand", "onPartialResults: '$partial'")
                 _state.value = _state.value.copy(partialResult = partial)
 
                 // Check for commands in partial results for faster response
                 val command = parseCommand(partial)
                 if (command != VoiceCommand.NONE) {
+                    android.util.Log.d("VoiceCommand", "Command detected from partial: $command, invoking callback")
                     _state.value = _state.value.copy(lastCommand = command)
                     onCommand(command)
                 }
@@ -188,11 +206,13 @@ class VoiceCommandListener(
     }
 
     private fun processResults(matches: List<String>?) {
+        android.util.Log.d("VoiceCommand", "processResults: $matches")
         if (matches.isNullOrEmpty()) return
 
         for (match in matches) {
             val command = parseCommand(match)
             if (command != VoiceCommand.NONE) {
+                android.util.Log.d("VoiceCommand", "Command from final results: $command, invoking callback")
                 _state.value = _state.value.copy(lastCommand = command)
                 onCommand(command)
                 break
@@ -202,14 +222,31 @@ class VoiceCommandListener(
 
     private fun parseCommand(text: String): VoiceCommand {
         val lowerText = text.lowercase().trim()
+        android.util.Log.d("VoiceCommand", "parseCommand: '$lowerText'")
 
-        return when {
-            startKeywords.any { lowerText.contains(it) } -> VoiceCommand.START
-            stopKeywords.any { lowerText.contains(it) } -> VoiceCommand.STOP
-            pauseKeywords.any { lowerText.contains(it) } -> VoiceCommand.PAUSE
-            resumeKeywords.any { lowerText.contains(it) } -> VoiceCommand.RESUME
+        // Split into words for more accurate matching
+        val words = lowerText.split(Regex("\\s+"))
+
+        // Check for STOP first - it's more critical and prevents "stop recording" from matching START
+        val hasStopWord = stopKeywords.any { keyword -> words.any { word -> word.contains(keyword) } }
+        val hasPauseWord = pauseKeywords.any { keyword -> words.any { word -> word.contains(keyword) } }
+        val hasResumeWord = resumeKeywords.any { keyword -> words.any { word -> word.contains(keyword) } }
+        val hasStartWord = startKeywords.any { keyword -> words.any { word -> word.contains(keyword) } }
+
+        android.util.Log.d("VoiceCommand", "hasStop=$hasStopWord, hasPause=$hasPauseWord, hasResume=$hasResumeWord, hasStart=$hasStartWord")
+
+        // Priority: STOP > PAUSE > RESUME > START
+        // This ensures "stop recording" triggers STOP, not START (because "record" is a start keyword)
+        val command = when {
+            hasStopWord -> VoiceCommand.STOP
+            hasPauseWord -> VoiceCommand.PAUSE
+            hasResumeWord -> VoiceCommand.RESUME
+            hasStartWord -> VoiceCommand.START
             else -> VoiceCommand.NONE
         }
+
+        android.util.Log.d("VoiceCommand", "Parsed command: $command")
+        return command
     }
 
     private fun restartListening() {
