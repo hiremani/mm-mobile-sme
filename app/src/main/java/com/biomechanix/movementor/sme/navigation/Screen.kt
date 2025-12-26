@@ -17,6 +17,18 @@ sealed class Screen(val route: String) {
     // Recording flow
     data object NewRecording : Screen("recording/new")
 
+    // Camera setup wizard (before recording)
+    data object SetupWizard : Screen("setup/{exerciseType}/{exerciseName}?sessionId={sessionId}") {
+        fun createRoute(
+            exerciseType: String,
+            exerciseName: String,
+            sessionId: String? = null
+        ): String {
+            val base = "setup/$exerciseType/$exerciseName"
+            return if (sessionId != null) "$base?sessionId=$sessionId" else base
+        }
+    }
+
     data object Recording : Screen("recording/{exerciseType}/{exerciseName}?sessionId={sessionId}") {
         fun createRoute(
             exerciseType: String,

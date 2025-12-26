@@ -37,7 +37,8 @@
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.MoveMentorSME"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullSensor"
+            android:configChanges="orientation|screenSize|screenLayout"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

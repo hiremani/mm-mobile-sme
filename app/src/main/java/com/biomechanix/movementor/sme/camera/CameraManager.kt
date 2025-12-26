@@ -313,4 +313,28 @@ class CameraManager @Inject constructor(
             false
         }
     }
+
+    /**
+     * Check if pose detection (image analysis) is available.
+     */
+    fun isPoseDetectionAvailable(): Boolean = imageAnalysis != null
+
+    /**
+     * Get estimated camera focal length in pixels.
+     * This is an approximation based on typical smartphone camera specs.
+     * For accurate distance estimation, device-specific calibration would be needed.
+     *
+     * @return Estimated focal length in pixels, or null if unknown
+     */
+    fun getFocalLengthPx(): Float? {
+        // Most smartphone cameras have a horizontal FoV around 60-80 degrees
+        // For HD resolution (1280x720), assuming ~70 degree FoV:
+        // focal_length_px = (image_width / 2) / tan(FoV / 2)
+        // focal_length_px ≈ 640 / tan(35°) ≈ 640 / 0.7 ≈ 914
+        //
+        // This is an approximation. For production use, consider:
+        // - Using CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS
+        // - Storing device-specific calibration data
+        return 914f
+    }
 }
