@@ -69,15 +69,34 @@ class PlaybackViewModel @Inject constructor(
 
     private fun loadSession() {
         viewModelScope.launch {
+            android.util.Log.d("PlaybackVM", "loadSession() called for sessionId=$sessionId")
             _uiState.update { it.copy(isLoading = true) }
 
             try {
                 val session = recordingRepository.getSession(sessionId)
+                android.util.Log.d("PlaybackVM", "Session loaded: ${session != null}")
+
                 if (session == null) {
+                    android.util.Log.e("PlaybackVM", "Session not found: $sessionId")
                     _uiState.update {
                         it.copy(isLoading = false, error = "Session not found")
                     }
                     return@launch
+                }
+
+                android.util.Log.d("PlaybackVM", "Session details: videoFilePath=${session.videoFilePath}, frameCount=${session.frameCount}, durationSeconds=${session.durationSeconds}, status=${session.status}")
+
+                // Check if video file exists and is ready
+                val videoPath = session.videoFilePath
+                val videoFileReady = if (videoPath != null) {
+                    val videoFile = java.io.File(videoPath)
+                    val exists = videoFile.exists()
+                    val size = if (exists) videoFile.length() else 0
+                    android.util.Log.d("PlaybackVM", "Video file: exists=$exists, canRead=${videoFile.canRead()}, size=$size")
+                    exists && size > 0
+                } else {
+                    android.util.Log.w("PlaybackVM", "videoFilePath is null - waiting for video to be saved")
+                    false
                 }
 
                 // Calculate total frames from duration
@@ -86,12 +105,14 @@ class PlaybackViewModel @Inject constructor(
                 } else {
                     session.frameCount
                 }
+                android.util.Log.d("PlaybackVM", "Calculated totalFrames=$totalFrames, videoFileReady=$videoFileReady")
 
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         session = session,
-                        videoPath = session.videoFilePath,
+                        // Only set videoPath if file is actually ready
+                        videoPath = if (videoFileReady) videoPath else null,
                         frameRate = session.frameRate,
                         totalFrames = totalFrames,
                         trimStartFrame = session.trimStartFrame,
@@ -104,6 +125,7 @@ class PlaybackViewModel @Inject constructor(
                 observeSession()
 
             } catch (e: Exception) {
+                android.util.Log.e("PlaybackVM", "Failed to load session: ${e.message}", e)
                 _uiState.update {
                     it.copy(isLoading = false, error = "Failed to load session: ${e.message}")
                 }
@@ -115,9 +137,25 @@ class PlaybackViewModel @Inject constructor(
         viewModelScope.launch {
             recordingRepository.getSessionFlow(sessionId).collect { session ->
                 session?.let { s ->
+                    android.util.Log.d("PlaybackVM", "Session updated: videoFilePath=${s.videoFilePath}, status=${s.status}")
+
+                    // Check if video file is now available
+                    val videoPath = s.videoFilePath
+                    val videoFileReady = if (videoPath != null) {
+                        val file = java.io.File(videoPath)
+                        val exists = file.exists()
+                        val size = if (exists) file.length() else 0
+                        android.util.Log.d("PlaybackVM", "Video file check: exists=$exists, size=$size bytes")
+                        exists && size > 0
+                    } else {
+                        false
+                    }
+
                     _uiState.update {
                         it.copy(
                             session = s,
+                            // Only update videoPath if file is ready (exists and has content)
+                            videoPath = if (videoFileReady) videoPath else it.videoPath,
                             trimStartFrame = s.trimStartFrame,
                             trimEndFrame = s.trimEndFrame,
                             qualityScore = s.qualityScore

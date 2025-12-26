@@ -21,9 +21,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -39,12 +41,12 @@ data class RecordingUiState(
     val frameCount: Int = 0,
     val currentPose: PoseResult? = null,
     val poseConfidence: Float = 0f,
-    val useFrontCamera: Boolean = false,
+    val useFrontCamera: Boolean = true,
     val session: RecordingSessionEntity? = null,
     val error: String? = null,
     val showPoseOverlay: Boolean = true,
     val qualityIndicator: QualityIndicator = QualityIndicator.UNKNOWN,
-    val voiceControlEnabled: Boolean = false,
+    val voiceControlEnabled: Boolean = true,
     val voiceListening: Boolean = false,
     val lastVoiceCommand: String = "",
     val isVideoCaptureAvailable: Boolean = false,
@@ -259,7 +261,7 @@ class RecordingViewModel @Inject constructor(
                 recordingRepository.updateSessionStatus(currentSessionId!!, SessionStatus.RECORDING)
                 recordingRepository.updateSessionVideoPath(currentSessionId!!, videoFile.absolutePath)
 
-                // Start video recording
+                // Start video recording (no audio - keeps microphone free for voice commands)
                 val recordingStarted = cameraManager.startRecording(videoFile) { event ->
                     // Handle recording events if needed
                 }
@@ -297,20 +299,25 @@ class RecordingViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Stop video recording
-                cameraManager.stopRecording()
+                android.util.Log.d("RecordingVM", "stopRecording: starting stop sequence")
 
-                // Stop frame collection
+                // Update UI immediately to show we're stopping
+                _uiState.update {
+                    it.copy(isRecording = false, isPaused = false)
+                }
+
+                // Stop frame collection first
                 frameCollectionJob?.cancel()
                 frameCollectionJob = null
 
                 // Save any remaining frames
                 if (pendingFrames.isNotEmpty()) {
+                    android.util.Log.d("RecordingVM", "Saving ${pendingFrames.size} remaining frames")
                     recordingRepository.savePoseFramesBatch(pendingFrames.toList())
                     pendingFrames.clear()
                 }
 
-                // Update session
+                // Update session metadata
                 val durationSeconds = (System.currentTimeMillis() - recordingStartTime) / 1000.0
                 currentSessionId?.let { sessionId ->
                     recordingRepository.updateSessionDuration(sessionId, durationSeconds)
@@ -318,13 +325,25 @@ class RecordingViewModel @Inject constructor(
                     recordingRepository.updateSessionStatus(sessionId, SessionStatus.RECORDED)
                 }
 
-                _uiState.update {
-                    it.copy(isRecording = false, isPaused = false)
+                // Stop video recording - this triggers async finalization
+                android.util.Log.d("RecordingVM", "Calling cameraManager.stopRecording()")
+                cameraManager.stopRecording()
+
+                // Wait for video file to be fully written (finalized)
+                android.util.Log.d("RecordingVM", "Waiting for video finalization...")
+                val finalized = withTimeoutOrNull(10000L) { // 10 second timeout
+                    cameraManager.recordingFinalized.first { it }
                 }
+                if (finalized == null) {
+                    android.util.Log.w("RecordingVM", "Video finalization timeout - proceeding anyway")
+                }
+
+                android.util.Log.d("RecordingVM", "Video finalized, emitting events")
                 _events.send(RecordingEvent.RecordingStopped)
                 _events.send(RecordingEvent.RecordingComplete(currentSessionId!!))
 
             } catch (e: Exception) {
+                android.util.Log.e("RecordingVM", "Failed to stop recording: ${e.message}", e)
                 _events.send(RecordingEvent.Error("Failed to stop recording: ${e.message}"))
             }
         }
@@ -459,28 +478,42 @@ class RecordingViewModel @Inject constructor(
      * Handle voice command.
      */
     fun handleVoiceCommand(command: VoiceCommand, exerciseType: String, exerciseName: String) {
+        android.util.Log.d("RecordingVM", "handleVoiceCommand: $command, isRecording=${_uiState.value.isRecording}, isPaused=${_uiState.value.isPaused}")
+
         val commandName = command.name.lowercase().replaceFirstChar { it.uppercase() }
         _uiState.update { it.copy(lastVoiceCommand = commandName) }
 
         when (command) {
             VoiceCommand.START -> {
                 if (!_uiState.value.isRecording) {
+                    android.util.Log.d("RecordingVM", "Executing START command")
                     startRecording(exerciseType, exerciseName)
+                } else {
+                    android.util.Log.d("RecordingVM", "START ignored - already recording")
                 }
             }
             VoiceCommand.STOP -> {
                 if (_uiState.value.isRecording) {
+                    android.util.Log.d("RecordingVM", "Executing STOP command")
                     stopRecording()
+                } else {
+                    android.util.Log.d("RecordingVM", "STOP ignored - not recording")
                 }
             }
             VoiceCommand.PAUSE -> {
                 if (_uiState.value.isRecording && !_uiState.value.isPaused) {
+                    android.util.Log.d("RecordingVM", "Executing PAUSE command")
                     pauseRecording()
+                } else {
+                    android.util.Log.d("RecordingVM", "PAUSE ignored - not recording or already paused")
                 }
             }
             VoiceCommand.RESUME -> {
                 if (_uiState.value.isRecording && _uiState.value.isPaused) {
+                    android.util.Log.d("RecordingVM", "Executing RESUME command")
                     resumeRecording()
+                } else {
+                    android.util.Log.d("RecordingVM", "RESUME ignored - not recording or not paused")
                 }
             }
             VoiceCommand.NONE -> { /* Do nothing */ }

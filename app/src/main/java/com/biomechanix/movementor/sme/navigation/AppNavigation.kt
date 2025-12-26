@@ -43,6 +43,7 @@ import com.biomechanix.movementor.sme.ui.screens.recording.RecordingScreen
 import com.biomechanix.movementor.sme.ui.screens.sessions.SessionDetailScreen
 import com.biomechanix.movementor.sme.ui.screens.sessions.SessionListScreen
 import com.biomechanix.movementor.sme.ui.screens.settings.SettingsScreen
+import com.biomechanix.movementor.sme.ui.screens.setup.SetupWizardScreen
 
 /**
  * Bottom navigation items for the main app screens.
@@ -202,8 +203,9 @@ fun AppNavigation(
                 NewRecordingScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onStartRecording = { exerciseType, exerciseName ->
+                        // Navigate to Setup Wizard instead of directly to Recording
                         navController.navigate(
-                            Screen.Recording.createRoute(
+                            Screen.SetupWizard.createRoute(
                                 exerciseType = exerciseType,
                                 exerciseName = exerciseName
                             )
@@ -212,6 +214,42 @@ fun AppNavigation(
                 )
             }
 
+            // Camera Setup Wizard
+            composable(
+                route = Screen.SetupWizard.route,
+                arguments = listOf(
+                    navArgument(Screen.EXERCISE_TYPE_ARG) { type = NavType.StringType },
+                    navArgument(Screen.EXERCISE_NAME_ARG) { type = NavType.StringType },
+                    navArgument(Screen.SESSION_ID_ARG) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val exerciseType = backStackEntry.arguments?.getString(Screen.EXERCISE_TYPE_ARG) ?: ""
+                val exerciseName = backStackEntry.arguments?.getString(Screen.EXERCISE_NAME_ARG) ?: ""
+                val sessionId = backStackEntry.arguments?.getString(Screen.SESSION_ID_ARG)
+
+                SetupWizardScreen(
+                    onNavigateToRecording = { configSessionId ->
+                        // Navigate to Recording screen after setup is complete
+                        navController.navigate(
+                            Screen.Recording.createRoute(
+                                exerciseType = exerciseType,
+                                exerciseName = exerciseName,
+                                sessionId = configSessionId
+                            )
+                        ) {
+                            // Remove setup wizard from back stack
+                            popUpTo(Screen.SetupWizard.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            // Recording screen
             composable(
                 route = Screen.Recording.route,
                 arguments = listOf(

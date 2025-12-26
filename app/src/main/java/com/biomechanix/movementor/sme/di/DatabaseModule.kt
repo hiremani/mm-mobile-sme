@@ -2,6 +2,7 @@ package com.biomechanix.movementor.sme.di
 
 import android.content.Context
 import androidx.room.Room
+import com.biomechanix.movementor.sme.data.local.dao.CameraSetupConfigDao
 import com.biomechanix.movementor.sme.data.local.dao.PhaseAnnotationDao
 import com.biomechanix.movementor.sme.data.local.dao.PoseFrameDao
 import com.biomechanix.movementor.sme.data.local.dao.RecordingSessionDao
@@ -57,5 +58,11 @@ object DatabaseModule {
     @Singleton
     fun provideSyncQueueDao(database: AppDatabase): SyncQueueDao {
         return database.syncQueueDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCameraSetupConfigDao(database: AppDatabase): CameraSetupConfigDao {
+        return database.cameraSetupConfigDao()
     }
 }

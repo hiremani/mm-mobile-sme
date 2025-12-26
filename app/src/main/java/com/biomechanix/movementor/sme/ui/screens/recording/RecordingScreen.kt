@@ -5,6 +5,9 @@ import android.Manifest
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.camera.view.PreviewView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -191,7 +194,7 @@ private fun RecordingScreenContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
-    // Keep screen on and maintain brightness while on recording screen
+    // Full screen immersive mode, keep screen on and maintain brightness
     DisposableEffect(Unit) {
         val activity = context as? Activity
         val window = activity?.window
@@ -205,11 +208,25 @@ private fun RecordingScreenContent(
             screenBrightness = 1.0f
         }
 
+        // Enable full screen immersive mode
+        window?.let { win ->
+            WindowCompat.setDecorFitsSystemWindows(win, false)
+            val controller = WindowInsetsControllerCompat(win, win.decorView)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
         onDispose {
             // Restore original settings when leaving the screen
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             window?.attributes = window?.attributes?.apply {
                 screenBrightness = originalBrightness
+            }
+            // Restore system bars
+            window?.let { win ->
+                WindowCompat.setDecorFitsSystemWindows(win, true)
+                val controller = WindowInsetsControllerCompat(win, win.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
             }
         }
     }
@@ -319,7 +336,7 @@ private fun RecordingScreenContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.7f)),
+                    .background(Color.Black.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -455,7 +472,7 @@ private fun TopBar(
         // Exercise name
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color.Black.copy(alpha = 0.5f)
+            color = Color.Black.copy(alpha = 0.1f)
         ) {
             Text(
                 text = exerciseName,
@@ -571,7 +588,7 @@ private fun RecordingControls(
         IconButton(
             onClick = onTogglePoseOverlay,
             colors = IconButtonDefaults.iconButtonColors(
-                containerColor = Color.Black.copy(alpha = 0.5f)
+                containerColor = Color.Black.copy(alpha = 0.1f)
             )
         ) {
             Icon(
@@ -610,7 +627,7 @@ private fun RecordingControls(
             IconButton(
                 onClick = if (isPaused) onResumeRecording else onPauseRecording,
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
+                    containerColor = Color.Black.copy(alpha = 0.1f)
                 )
             ) {
                 Icon(
@@ -623,7 +640,7 @@ private fun RecordingControls(
             IconButton(
                 onClick = onSwitchCamera,
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
+                    containerColor = Color.Black.copy(alpha = 0.1f)
                 )
             ) {
                 Icon(
@@ -659,7 +676,7 @@ private fun VoiceControlIndicator(
     val backgroundColor = when {
         isListening -> Color(0xFF4CAF50).copy(alpha = 0.9f) // Green when actively listening
         isEnabled -> Color(0xFFFFC107).copy(alpha = 0.9f)   // Yellow when enabled but not listening
-        else -> Color.Black.copy(alpha = 0.5f)              // Gray when disabled
+        else -> Color.Black.copy(alpha = 0.1f)              // Gray when disabled
     }
 
     Surface(
