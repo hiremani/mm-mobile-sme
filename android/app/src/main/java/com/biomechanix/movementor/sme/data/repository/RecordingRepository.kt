@@ -1,20 +1,40 @@
 package com.biomechanix.movementor.sme.data.repository
 
+import com.biomechanix.movementor.sme.data.local.dao.CameraSetupConfigDao
 import com.biomechanix.movementor.sme.data.local.dao.PhaseAnnotationDao
 import com.biomechanix.movementor.sme.data.local.dao.PoseFrameDao
 import com.biomechanix.movementor.sme.data.local.dao.RecordingSessionDao
 import com.biomechanix.movementor.sme.data.local.dao.SyncQueueDao
+import com.biomechanix.movementor.sme.data.local.entity.CameraSetupConfigEntity
 import com.biomechanix.movementor.sme.data.local.entity.PoseFrameEntity
 import com.biomechanix.movementor.sme.data.local.entity.RecordingSessionEntity
 import com.biomechanix.movementor.sme.data.local.entity.SyncQueueEntity
 import com.biomechanix.movementor.sme.data.local.preferences.PreferencesManager
 import com.biomechanix.movementor.sme.data.remote.api.RecordingApi
+import com.biomechanix.movementor.sme.data.remote.dto.ARSetupDataDto
+import com.biomechanix.movementor.sme.data.remote.dto.BoundingBoxDto
+import com.biomechanix.movementor.sme.data.remote.dto.CameraPlacementInstructionsDto
+import com.biomechanix.movementor.sme.data.remote.dto.CameraPositionGuideDto
+import com.biomechanix.movementor.sme.data.remote.dto.CameraSetupDto
+import com.biomechanix.movementor.sme.data.remote.dto.ExerciseZoneDto
+import com.biomechanix.movementor.sme.data.remote.dto.FloorMarkerDto
 import com.biomechanix.movementor.sme.data.remote.dto.GeneratePackageRequest
 import com.biomechanix.movementor.sme.data.remote.dto.GeneratePackageResponse
+import com.biomechanix.movementor.sme.data.remote.dto.HeightMarkerDto
 import com.biomechanix.movementor.sme.data.remote.dto.InitiateRecordingRequest
 import com.biomechanix.movementor.sme.data.remote.dto.PoseFrameDto
 import com.biomechanix.movementor.sme.data.remote.dto.RecordingSessionResponse
+import com.biomechanix.movementor.sme.data.remote.dto.ReferencePoseDto
+import com.biomechanix.movementor.sme.data.remote.dto.SetupInstructionsDto
+import com.biomechanix.movementor.sme.data.remote.dto.SubjectPositioningDto
+import com.biomechanix.movementor.sme.data.remote.dto.SubjectPositioningInstructionsDto
 import com.biomechanix.movementor.sme.data.remote.dto.SubmitPoseFramesRequest
+import com.biomechanix.movementor.sme.data.remote.dto.Vector3Dto
+import com.biomechanix.movementor.sme.data.remote.dto.VerificationItemDto
+import com.biomechanix.movementor.sme.domain.model.setup.ARSetupData
+import com.biomechanix.movementor.sme.domain.model.setup.BoundingBox
+import com.biomechanix.movementor.sme.domain.model.setup.ReferencePose
+import com.biomechanix.movementor.sme.domain.model.setup.SetupInstructions
 import com.biomechanix.movementor.sme.ml.Landmark
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
@@ -59,6 +79,7 @@ class RecordingRepository @Inject constructor(
     private val frameDao: PoseFrameDao,
     private val phaseDao: PhaseAnnotationDao,
     private val syncQueueDao: SyncQueueDao,
+    private val cameraSetupConfigDao: CameraSetupConfigDao,
     private val recordingApi: RecordingApi,
     private val preferencesManager: PreferencesManager,
     private val gson: Gson
@@ -381,6 +402,9 @@ class RecordingRepository @Inject constructor(
         async: Boolean = true
     ): Result<GeneratePackageResponse> {
         return try {
+            // Fetch camera setup for this session
+            val cameraSetup = getCameraSetupForSession(sessionId)
+
             val request = GeneratePackageRequest(
                 name = name,
                 description = description,
@@ -389,7 +413,8 @@ class RecordingRepository @Inject constructor(
                 primaryJoints = primaryJoints,
                 toleranceTight = toleranceTight,
                 toleranceModerate = toleranceModerate,
-                toleranceLoose = toleranceLoose
+                toleranceLoose = toleranceLoose,
+                cameraSetup = cameraSetup
             )
 
             val response = if (async) {
@@ -408,5 +433,144 @@ class RecordingRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    // ========================================
+    // CAMERA SETUP CONVERSION HELPERS
+    // ========================================
+
+    /**
+     * Get camera setup DTO for a session.
+     */
+    suspend fun getCameraSetupForSession(sessionId: String): CameraSetupDto? {
+        val config = cameraSetupConfigDao.getBySessionId(sessionId) ?: return null
+        return convertToCameraSetupDto(config)
+    }
+
+    /**
+     * Convert CameraSetupConfigEntity to CameraSetupDto.
+     */
+    private fun convertToCameraSetupDto(entity: CameraSetupConfigEntity): CameraSetupDto {
+        // Parse JSON fields
+        val boundingBox = try {
+            gson.fromJson(entity.subjectBoundingBoxJson, BoundingBox::class.java)
+        } catch (e: Exception) { null }
+
+        val setupInstructions = try {
+            gson.fromJson(entity.setupInstructionsJson, SetupInstructions::class.java)
+        } catch (e: Exception) { null }
+
+        val arSetupData = try {
+            gson.fromJson(entity.arSetupDataJson, ARSetupData::class.java)
+        } catch (e: Exception) { null }
+
+        val referencePose = try {
+            gson.fromJson(entity.referencePoseJson, ReferencePose::class.java)
+        } catch (e: Exception) { null }
+
+        return CameraSetupDto(
+            optimalDistanceMeters = entity.estimatedDistanceMeters,
+            cameraHeightRatio = entity.cameraHeightRatio,
+            cameraView = entity.cameraView.name,
+            movementPlane = entity.movementPlane.name,
+            subjectPositioning = SubjectPositioningDto(
+                centerX = entity.subjectCenterX,
+                centerY = entity.subjectCenterY,
+                boundingBox = boundingBox?.let {
+                    BoundingBoxDto(
+                        left = it.left,
+                        top = it.top,
+                        right = it.right,
+                        bottom = it.bottom
+                    )
+                }
+            ),
+            arSetupData = arSetupData?.let { convertToARSetupDataDto(it) },
+            setupInstructions = setupInstructions?.let { convertToSetupInstructionsDto(it) },
+            referencePose = referencePose?.let { convertToReferencePoseDto(it) },
+            setupScore = entity.setupScore
+        )
+    }
+
+    /**
+     * Convert ARSetupData to ARSetupDataDto.
+     */
+    private fun convertToARSetupDataDto(data: ARSetupData): ARSetupDataDto {
+        return ARSetupDataDto(
+            exerciseZone = ExerciseZoneDto(
+                centerOffsetFromCamera = Vector3Dto(
+                    x = data.exerciseZone.centerOffsetFromCamera.x,
+                    y = data.exerciseZone.centerOffsetFromCamera.y,
+                    z = data.exerciseZone.centerOffsetFromCamera.z
+                ),
+                radius = data.exerciseZone.radius,
+                orientation = data.exerciseZone.orientation
+            ),
+            cameraPosition = CameraPositionGuideDto(
+                distanceFromSubject = data.cameraPosition.distanceFromSubject,
+                heightFromGround = data.cameraPosition.heightFromGround,
+                facingDirection = data.cameraPosition.facingDirection
+            ),
+            floorMarkers = data.floorMarkers.map { marker ->
+                FloorMarkerDto(
+                    position = Vector3Dto(
+                        x = marker.position.x,
+                        y = marker.position.y,
+                        z = marker.position.z
+                    ),
+                    type = marker.type.name,
+                    label = marker.label
+                )
+            },
+            heightMarkers = data.heightMarkers.map { marker ->
+                HeightMarkerDto(
+                    height = marker.height,
+                    label = marker.label,
+                    isForCamera = marker.isForCamera
+                )
+            }
+        )
+    }
+
+    /**
+     * Convert SetupInstructions to SetupInstructionsDto.
+     */
+    private fun convertToSetupInstructionsDto(instructions: SetupInstructions): SetupInstructionsDto {
+        return SetupInstructionsDto(
+            summary = instructions.summary,
+            cameraPlacement = CameraPlacementInstructionsDto(
+                distanceText = instructions.cameraPlacement.distanceText,
+                heightText = instructions.cameraPlacement.heightText,
+                angleText = instructions.cameraPlacement.angleText,
+                stabilityText = instructions.cameraPlacement.stabilityText,
+                environmentText = instructions.cameraPlacement.environmentText
+            ),
+            subjectPositioning = SubjectPositioningInstructionsDto(
+                standingPositionText = instructions.subjectPositioning.standingPositionText,
+                facingDirectionText = instructions.subjectPositioning.facingDirectionText,
+                spaceRequirementText = instructions.subjectPositioning.spaceRequirementText,
+                startingPoseText = instructions.subjectPositioning.startingPoseText
+            ),
+            verificationChecklist = instructions.verificationChecklist.map { item ->
+                VerificationItemDto(
+                    checkText = item.checkText,
+                    voicePrompt = item.voicePrompt
+                )
+            }
+        )
+    }
+
+    /**
+     * Convert ReferencePose to ReferencePoseDto.
+     */
+    private fun convertToReferencePoseDto(pose: ReferencePose): ReferencePoseDto {
+        return ReferencePoseDto(
+            landmarks = pose.landmarks.map { landmark ->
+                listOf(landmark.x, landmark.y, landmark.z, landmark.visibility, landmark.presence)
+            },
+            timestampMs = pose.timestampMs,
+            imageWidth = pose.imageWidth,
+            imageHeight = pose.imageHeight
+        )
     }
 }

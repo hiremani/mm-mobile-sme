@@ -24,7 +24,8 @@
       "Bash(robocopy:*)",
       "Bash(powershell:*)",
       "Bash(git add:*)",
-      "Bash(./gradlew.bat assembleDevDebug:*)"
+      "Bash(./gradlew.bat assembleDevDebug:*)",
+      "Bash(./mvnw compile:*)"
     ]
   }
 }
