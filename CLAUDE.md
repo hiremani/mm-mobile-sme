@@ -36,9 +36,26 @@ Review these repositories to understand the platform architecture before impleme
 - **Background**: WorkManager
 - **Video Playback**: Media3 ExoPlayer
 
+## Project Structure
+
+```
+mm-mobile-sme/
+├── android/          # Android app project
+│   ├── app/          # Main Android application module
+│   ├── gradle/       # Gradle wrapper and version catalog
+│   └── ...           # Gradle build files
+├── ios/              # iOS app (planned for future phases)
+├── docs/             # Project documentation
+├── CLAUDE.md         # This file
+└── README.md         # Project README
+```
+
 ## Build Commands
 
+Run from the `android/` directory:
+
 ```bash
+cd android
 ./gradlew assembleDebug           # Build debug APK
 ./gradlew assembleDevDebug        # Build dev flavor debug
 ./gradlew test                    # Run unit tests
@@ -50,7 +67,7 @@ Review these repositories to understand the platform architecture before impleme
 
 ## Architecture
 
-Clean Architecture with MVVM pattern:
+Clean Architecture with MVVM pattern (under `android/app/src/main/java/`):
 ```
 com.biomechanix.movementor.sme/
 ├── data/local/     # Room DB, DAOs, DataStore

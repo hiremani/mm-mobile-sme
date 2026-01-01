@@ -20,7 +20,6 @@ target/
 out/
 build/
 dist/
-gradle/
 
 # =========================
 # Environment files
