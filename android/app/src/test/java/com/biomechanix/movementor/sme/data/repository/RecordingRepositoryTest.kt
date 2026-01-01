@@ -1,5 +1,6 @@
 package com.biomechanix.movementor.sme.data.repository
 
+import com.biomechanix.movementor.sme.data.local.dao.CameraSetupConfigDao
 import com.biomechanix.movementor.sme.data.local.dao.PhaseAnnotationDao
 import com.biomechanix.movementor.sme.data.local.dao.PoseFrameDao
 import com.biomechanix.movementor.sme.data.local.dao.RecordingSessionDao
@@ -29,6 +30,7 @@ class RecordingRepositoryTest {
     private lateinit var frameDao: PoseFrameDao
     private lateinit var phaseDao: PhaseAnnotationDao
     private lateinit var syncQueueDao: SyncQueueDao
+    private lateinit var cameraSetupConfigDao: CameraSetupConfigDao
     private lateinit var recordingApi: RecordingApi
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var gson: Gson
@@ -66,6 +68,7 @@ class RecordingRepositoryTest {
         frameDao = mockk(relaxed = true)
         phaseDao = mockk(relaxed = true)
         syncQueueDao = mockk(relaxed = true)
+        cameraSetupConfigDao = mockk(relaxed = true)
         recordingApi = mockk(relaxed = true)
         preferencesManager = mockk(relaxed = true)
         gson = Gson()
@@ -78,6 +81,7 @@ class RecordingRepositoryTest {
             frameDao,
             phaseDao,
             syncQueueDao,
+            cameraSetupConfigDao,
             recordingApi,
             preferencesManager,
             gson

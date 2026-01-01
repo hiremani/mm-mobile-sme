@@ -1,5 +1,6 @@
 package com.biomechanix.movementor.sme.di
 
+import com.biomechanix.movementor.sme.data.local.dao.CameraSetupConfigDao
 import com.biomechanix.movementor.sme.data.local.dao.PhaseAnnotationDao
 import com.biomechanix.movementor.sme.data.local.dao.PoseFrameDao
 import com.biomechanix.movementor.sme.data.local.dao.RecordingSessionDao
@@ -29,6 +30,7 @@ object RepositoryModule {
         frameDao: PoseFrameDao,
         phaseDao: PhaseAnnotationDao,
         syncQueueDao: SyncQueueDao,
+        cameraSetupConfigDao: CameraSetupConfigDao,
         recordingApi: RecordingApi,
         preferencesManager: PreferencesManager,
         gson: Gson
@@ -38,6 +40,7 @@ object RepositoryModule {
             frameDao = frameDao,
             phaseDao = phaseDao,
             syncQueueDao = syncQueueDao,
+            cameraSetupConfigDao = cameraSetupConfigDao,
             recordingApi = recordingApi,
             preferencesManager = preferencesManager,
             gson = gson

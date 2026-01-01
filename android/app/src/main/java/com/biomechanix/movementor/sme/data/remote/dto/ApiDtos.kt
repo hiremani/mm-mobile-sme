@@ -182,7 +182,8 @@ data class GeneratePackageRequest(
     val primaryJoints: List<String>? = null,
     val toleranceTight: Double? = null,
     val toleranceModerate: Double? = null,
-    val toleranceLoose: Double? = null
+    val toleranceLoose: Double? = null,
+    val cameraSetup: CameraSetupDto? = null
 )
 
 data class GeneratePackageResponse(
